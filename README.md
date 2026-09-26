@@ -64,7 +64,7 @@ If nvm is in `~/.nvm` or `${XDG_CONFIG_HOME:-~/.config}/nvm`, you need no settin
 
 For Homebrew's nvm, set `NVM_DIR` to your versions directory (usually `~/.nvm`). The plugin looks for `nvm.sh` in `$NVM_DIR`, `$NVM_HOMEBREW`, `$HOMEBREW_PREFIX/opt/nvm`, `/opt/homebrew/opt/nvm` and `/usr/local/opt/nvm`. It never runs `brew`.
 
-For tab completion of `nvm`, load the plugin after `compinit`. oh-my-zsh, antidote and zinit do this for you.
+For tab completion of `nvm`, `compinit` must run before the plugin loads. oh-my-zsh does this for you. For the other methods, see each section.
 
 ### oh-my-zsh
 
@@ -92,16 +92,24 @@ source ~/.zsh/zsh-nvm-lazy/zsh-nvm-lazy.plugin.zsh
 
 ### antidote
 
-Add this line to `~/.zsh_plugins.txt`:
+Add this line to `${ZDOTDIR:-~}/.zsh_plugins.txt`:
 
 ```text
 fskroes/zsh-nvm-lazy
 ```
 
+In `~/.zshrc`, run `compinit` before `antidote load`.
+
 ### zinit
 
 ```zsh
 zinit light fskroes/zsh-nvm-lazy
+```
+
+zinit holds `compdef` calls until you replay them. So after `compinit`, add:
+
+```zsh
+zinit cdreplay -q
 ```
 
 ## Differences from `source nvm.sh`
