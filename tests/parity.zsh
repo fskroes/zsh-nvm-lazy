@@ -1,12 +1,4 @@
 #!/usr/bin/env zsh
-# Parity test: after the plugin loads, the shell must be the same as after
-# `source nvm.sh`. Each case builds a fake NVM_DIR (node binaries are small
-# scripts that print their version) and runs two clean shells, one with real
-# nvm.sh and one with the plugin, then compares PATH, NVM_BIN, NVM_INC,
-# MANPATH and `node --version`. It then runs nvm commands in both shells
-# and compares that output as well.
-#
-# Needs a real nvm.sh: $NVM_SH, else ~/.nvm/nvm.sh. No network.
 emulate zsh
 setopt extended_glob no_unset pipe_fail
 
@@ -20,9 +12,8 @@ nvm_version=$(sed -n "s/^ *nvm_echo '\([0-9.]*\)'$/\1/p" $nvm_sh | head -1)
 
 tmp=$(mktemp -d "${TMPDIR:-/tmp}/nvm-lazy-parity.XXXXXX")
 trap 'rm -rf -- $tmp' EXIT
-sys=/usr/bin:/bin   # sed, awk, grep and manpath for nvm.sh
+sys=/usr/bin:/bin
 
-# mk DIR VERSION... : a fake NVM_DIR with these node versions installed.
 mk() {
   local d=$1 v; shift
   mkdir -p $d/alias
@@ -35,11 +26,9 @@ echo $v" > $d/versions/node/$v/bin/node
     chmod +x $d/versions/node/$v/bin/node
   done
 }
-# al DIR NAME CONTENT : write alias NAME (for example default or lts/krypton).
 al() { mkdir -p ${1}/alias/${2:h}; print -r -- $3 > $1/alias/$2 }
 bin() { print -r -- $1/versions/node/$2/bin }
 
-# The probe runs in each clean shell. MODE is eager or plugin.
 cat > $tmp/probe.zsh <<'EOF'
 if [[ $MODE == eager ]]; then source $NVM_DIR/nvm.sh; else source $PLUGIN; fi
 print -r -- "PATH=$PATH"
@@ -54,7 +43,6 @@ print -r -- "LOADED=$+functions[nvm_ls_current]"
 [[ -n ${AFTER-} ]] && eval "$AFTER"
 EOF
 
-# After startup: nvm must work in the same way in both shells.
 after_std='print -- "--- after"
 nvm current; print "rc=$?"
 nvm bogus-command >/dev/null 2>&1; print "rc=$?"
@@ -64,15 +52,13 @@ print -r -- "nvm-is=$(whence -w nvm)"'
 
 typeset -a names
 typeset -A dir cpath cman cwd expect after
-# add NAME DIR PATH MANPATH(or -) EXPECT(fast|any) [AFTER]
 add() {
   names+=$1; dir[$1]=$2; cpath[$1]=$3; cman[$1]=$4; expect[$1]=$5
   after[$1]=${6-$after_std}; cwd[$1]=$tmp
 }
 
-n() { print -r -- $tmp/$1/nvm }   # fixture dir for a case
+n() { print -r -- $tmp/$1/nvm }
 
-# --- default alias forms -------------------------------------------------
 d=$(n exact);   mk $d v20.5.0 v22.1.0;  al $d default v22.1.0
 add exact $d "$sys" - fast "$after_std
 nvm use --silent v20.5.0; print -r -- \"PATH=\$PATH\"; print -r -- \"NVM_BIN=\$NVM_BIN\""
@@ -111,7 +97,6 @@ add nvmrc $d "$sys" - fast; cwd[nvmrc]=$tmp/nvmrc/proj/sub
 d=$(n empty);   mk $d v20.0.0; : > $d/alias/default
 add empty $d "$sys" - fast
 
-# --- PATH already holds node ---------------------------------------------
 d=$(n inherit); mk $d v20.0.0 v22.1.0; al $d default 22
 add inherit $d "$(bin $d v20.0.0):$sys" - fast
 d=$(n sysfirst); mk $d v20.0.0 v22.1.0; al $d default 22
@@ -123,29 +108,24 @@ print '#!/bin/sh\necho v99.0.0-system' > $tmp/sysnode/bin/node; chmod +x $tmp/sy
 add sysnode $d "$tmp/sysnode/bin:$sys" - fast
 d=$(n legacy);  mk $d v22.1.0; al $d default 22; mkdir -p $d/v0.10.0/bin
 add legacy $d "$d/v0.10.0/bin:$sys" - fast
-# The same, with a node in the old layout: that node is current, so nvm.sh decides.
 d=$(n legacynode); mk $d v22.1.0; al $d default 22; mkdir -p $d/v0.10.0/bin
 print '#!/bin/sh\necho v0.10.0' > $d/v0.10.0/bin/node; chmod +x $d/v0.10.0/bin/node
 add legacynode $d "$d/v0.10.0/bin:$sys" - any
 
-# --- MANPATH -------------------------------------------------------------
 d=$(n man);     mk $d v20.0.0 v22.1.0; al $d default 22
 add man $d "$sys" "/usr/share/man:/opt/x/share/man" fast
 d=$(n manold);  mk $d v20.0.0 v22.1.0; al $d default 22
 add manold $d "$sys" "$d/versions/node/v20.0.0/share/man:/usr/share/man" fast
 d=$(n manempty); mk $d v22.1.0; al $d default 22
-add manempty $d "$sys" "" fast   # exported, but empty
+add manempty $d "$sys" "" fast
 
-# --- odd places ----------------------------------------------------------
 d="$tmp/space dir/nvm"; mk $d v22.1.0; al $d default 22
 add space $d "$sys" - fast
-# nvm puts NVM_DIR into grep and sed patterns unescaped: [ ] change its match.
 d="$tmp/br[16]/nvm"; mk $d v22.1.0; al $d default 22
 add brackets $d "$sys" - any
 d="$tmp/br2[16]/nvm"; mk $d v20.5.0 v22.1.0; al $d default 22
 add brackets-inherit $d "$(bin $d v20.5.0):$sys" - any
 
-# PARITY_CASES="exact lts" runs only those cases (the pre-commit hook uses this).
 if [[ -n ${PARITY_CASES-} ]]; then
   for c in ${(s: :)PARITY_CASES}; do
     (( ${names[(Ie)$c]} )) || { print "FAIL: PARITY_CASES: no case named $c"; exit 1 }
@@ -153,8 +133,7 @@ if [[ -n ${PARITY_CASES-} ]]; then
   names=(${(s: :)PARITY_CASES})
 fi
 
-# Run every case twice (eager, plugin), all in parallel.
-run() {  # run CASE MODE
+run() {
   local c=$1 m=$2 o=$tmp/out/$1.$2
   local -a e=(HOME=$tmp/home PATH=${cpath[$c]} NVM_DIR=${dir[$c]} PLUGIN=$plugin
               MODE=$m AFTER=${after[$c]} TERM=dumb)
@@ -162,7 +141,6 @@ run() {  # run CASE MODE
   ( cd ${cwd[$c]} && env -i $e /bin/zsh -f $tmp/probe.zsh >$o.out 2>$o.err )
 }
 mkdir -p $tmp/out $tmp/home $tmp/nonvm
-# Extra checks, one clean shell each: xtra NAME NVM_DIR CODE
 xtra() { env -i HOME=$tmp/home PATH=$sys NVM_DIR=$2 /bin/zsh -f -c $3 >$tmp/out/x.$1 2>&1 }
 d=$(n major)
 xtra nonvm $tmp/nonvm "source ${(q)plugin}; print -r -- \"\$PATH|\$+functions[nvm]\"" &
@@ -172,7 +150,6 @@ xtra loaded $d "source \$NVM_DIR/nvm.sh; p=\$PATH; source ${(q)plugin}; [[ \$PAT
   autoload -U compinit; compinit -u -D
   source ${(q)plugin}; print -r -- \"before=\${+_comps[nvm]}\"
   nvm --version >/dev/null; print -r -- \"after=\$_comps[nvm]\"" &
-# Homebrew: nvm.sh and its completion live outside NVM_DIR, in $NVM_HOMEBREW.
 if [[ -r $nvm_comp ]]; then
   hb=$tmp/brew/opt/nvm; mkdir -p $hb/etc/bash_completion.d $tmp/brewdir/alias
   ln -s $nvm_sh $hb/nvm.sh; ln -s $nvm_comp $hb/etc/bash_completion.d/nvm
@@ -204,7 +181,6 @@ for c in $names; do
   print "ok: $c (${${loaded:#0}:+nvm.sh loaded at startup}${${loaded:#1}:+fast path})"
 done
 
-# check NAME EXPECTED MESSAGE
 check() {
   local out=$(<$tmp/out/x.$1)
   [[ $out == $2 ]] && print "ok: $3" || { print "FAIL: $3: got:"; print -r -- $out | sed 's/^/    /'; fail=1 }

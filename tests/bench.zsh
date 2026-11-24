@@ -1,7 +1,4 @@
 #!/usr/bin/env zsh
-# Startup cost of nvm, measured against your real nvm install:
-#   `source nvm.sh`  vs  this plugin, and the time to the first `node --version`.
-# Usage: zsh tests/bench.zsh [runs]   (default 30)
 emulate zsh
 zmodload zsh/datetime
 
@@ -10,8 +7,7 @@ nvm_dir=${NVM_DIR:-$HOME/.nvm}
 runs=${1:-30}
 [[ -r $nvm_dir/nvm.sh ]] || { print "no nvm.sh in $nvm_dir"; exit 1 }
 
-# Each run is a clean shell. It prints its own time in microseconds.
-measure() {  # measure LABEL CODE
+measure() {
   local -a t; local i
   for i in {1..$runs}; do
     t+=$(env -i HOME=$HOME PATH=/usr/bin:/bin NVM_DIR=$nvm_dir /bin/zsh -f -c "
